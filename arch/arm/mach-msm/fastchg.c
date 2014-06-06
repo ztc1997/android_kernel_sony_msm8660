@@ -67,7 +67,7 @@ int force_fast_charge_init(void)
 {
 	int force_fast_charge_retval;
 
-	force_fast_charge = FAST_CHARGE_DISABLED; /* Forced fast charge disabled by default */
+	force_fast_charge = FAST_CHARGE_FORCE_AC; /* Forced fast charge enabled by default */
 
 	force_fast_charge_kobj = kobject_create_and_add("fast_charge", kernel_kobj);
 	if (!force_fast_charge_kobj) {
