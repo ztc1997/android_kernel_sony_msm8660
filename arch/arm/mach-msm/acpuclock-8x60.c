@@ -47,9 +47,9 @@
 #define L_VAL_SCPLL_CAL_MIN	0x08 /* =  432 MHz with 27MHz source */
 
 #ifdef CONFIG_OC_ULTIMATE
-#define FREQ_TABLE_SIZE    33 
+#define FREQ_TABLE_SIZE    34 
 #else
-#define FREQ_TABLE_SIZE    27 
+#define FREQ_TABLE_SIZE    28
 #endif
 
 #define MAX_VDD_SC		1400000 /* uV */
