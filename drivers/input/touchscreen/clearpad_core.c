@@ -352,6 +352,9 @@ struct synaptics_clearpad {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs;
 #endif
+	bool wakeup;
+	int wakeup_down;
+	unsigned long wakeup_down_time;
 };
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
@@ -1210,6 +1213,9 @@ static void synaptics_funcarea_initialize(struct synaptics_clearpad *this)
 			button = (struct synaptics_button_data *)funcarea->data;
 			input_set_capability(this->input, EV_KEY, button->code);
 			break;
+		case SYN_FUNCAREA_WAKEUP:
+			input_set_capability(this->input, EV_KEY, KEY_POWER);
+			break;
 		default:
 			continue;
 		}
@@ -1242,6 +1248,13 @@ synaptics_funcarea_search(struct synaptics_clearpad *this,
 
 	/* get new funcarea */
 	for ( ; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
+		if (this->active & (SYN_STANDBY | SYN_STANDBY_AFTER_TASK)) {
+			if (funcarea->func != SYN_FUNCAREA_WAKEUP)
+				continue;
+		} else {
+			if (funcarea->func == SYN_FUNCAREA_WAKEUP)
+				continue;
+		}
 		if (synaptics_funcarea_test(&funcarea->original,
 						&pointer->cur))
 			return funcarea;
@@ -1315,6 +1328,19 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		if (button)
 			button->down = true;
 		break;
+	case SYN_FUNCAREA_WAKEUP:
+		LOG_EVENT(this, "wakeup\n");
+		if (!this->wakeup_down) {
+			if (time_is_after_jiffies(this->wakeup_down_time)) {
+				input_report_key(this->input, KEY_POWER, 1);
+				this->wakeup_down = 2;
+				this->wakeup_down_time = jiffies;
+			} else {
+			    this->wakeup_down = 1;
+				this->wakeup_down_time = jiffies + HZ / 5;
+			}
+		}
+		break;
 	default:
 		break;
 	}
@@ -1341,6 +1367,13 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 		if (button)
 			button->down = false;
 		break;
+	case SYN_FUNCAREA_WAKEUP:
+		if (this->wakeup_down) {
+			if (this->wakeup_down == 2)
+				input_report_key(this->input, KEY_POWER, 0);
+			this->wakeup_down = 0;
+		}
+	    break;
 	default:
 		break;
 	}
@@ -1890,6 +1923,8 @@ static ssize_t synaptics_clearpad_state_show(struct device *dev,
 	else if (!strncmp(attr->attr.name, __stringify(fwstate), PAGE_SIZE))
 		snprintf(buf, PAGE_SIZE,
 			"%s", state_name[this->state]);
+	else if (!strncmp(attr->attr.name, __stringify(wakeup), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", this->wakeup);
 	else
 		snprintf(buf, PAGE_SIZE, "illegal sysfs file");
 	return strnlen(buf, PAGE_SIZE);
@@ -2001,6 +2036,36 @@ end:
 	UNLOCK(this);
 	return strnlen(buf, PAGE_SIZE);
 }
+
+static ssize_t synaptics_clearpad_wakeup_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	if (sysfs_streq(buf, "1")) {
+		if (!this->wakeup) {
+			struct synaptics_funcarea *funcarea;
+
+			funcarea = this->funcarea;
+			if (funcarea) {
+				for (; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
+					if (funcarea->func == SYN_FUNCAREA_WAKEUP) {
+						this->wakeup = true;
+						break;
+					}
+				}
+			}
+		}
+	} else if (sysfs_streq(buf, "0")) {
+		this->wakeup = false;
+	}
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
 static DEVICE_ATTR(fwinfo, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwfamily, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwrevision, 0604, synaptics_clearpad_state_show, 0);
@@ -2009,6 +2074,7 @@ static DEVICE_ATTR(fwstate, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwflush, 0600, 0, synaptics_clearpad_fwflush_store);
 static DEVICE_ATTR(touchcmd, 0600, 0, synaptics_clearpad_touchcmd_store);
 static DEVICE_ATTR(enabled, 0600, 0, synaptics_clearpad_enabled_store);
+static DEVICE_ATTR(wakeup, 0644, synaptics_clearpad_state_show, synaptics_clearpad_wakeup_store);
 
 static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwinfo.attr,
@@ -2019,6 +2085,7 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwflush.attr,
 	&dev_attr_touchcmd.attr,
 	&dev_attr_enabled.attr,
+	&dev_attr_wakeup.attr,
 	NULL
 };
 
@@ -2085,7 +2152,8 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	rc = synaptics_clearpad_set_power(this);
+	if (!this->wakeup)
+	    rc = synaptics_clearpad_set_power(this);
 	return rc;
 }
 
@@ -2104,7 +2172,44 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	rc = synaptics_clearpad_set_power(this);
+	if (!this->wakeup)
+	    rc = synaptics_clearpad_set_power(this);
+	return rc;
+}
+
+static int synaptics_clearpad_suspend(struct device *dev)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	int rc = 0;
+
+#ifndef CONFIG_HAS_EARLYSUSPEND
+	rc = synaptics_clearpad_pm_suspend(&this->pdev->dev);
+#endif
+
+	if (this->wakeup) {
+		disable_irq(this->pdata->irq);
+		if (device_may_wakeup(dev))
+			enable_irq_wake(this->pdata->irq);
+	}
+
+	return rc;
+}
+
+static int synaptics_clearpad_resume(struct device *dev)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+	int rc = 0;
+
+	if (this->wakeup) {
+		if (device_may_wakeup(dev))
+			disable_irq_wake(this->pdata->irq);
+		enable_irq(this->pdata->irq);
+	}
+
+#ifndef CONFIG_HAS_EARLYSUSPEND
+	rc = synaptics_clearpad_pm_resume(&this->pdev->dev);
+#endif
+
 	return rc;
 }
 
@@ -2116,6 +2221,7 @@ static void synaptics_clearpad_early_suspend(struct early_suspend *handler)
 
 	dev_info(&this->pdev->dev, "early suspend\n");
 	synaptics_clearpad_pm_suspend(&this->pdev->dev);
+	this->wakeup_down_time = jiffies;
 }
 
 static void synaptics_clearpad_late_resume(struct early_suspend *handler)
@@ -2563,6 +2669,8 @@ static int __devinit clearpad_probe(struct platform_device *pdev)
 	if (rc)
 		goto err_irq;
 
+	device_init_wakeup(&this->pdev->dev, true);
+
 	return 0;
 
 err_irq:
@@ -2621,10 +2729,8 @@ static int __devexit clearpad_remove(struct platform_device *pdev)
 
 
 static const struct dev_pm_ops synaptics_clearpad_pm = {
-#ifndef CONFIG_HAS_EARLYSUSPEND
-	.suspend = synaptics_clearpad_pm_suspend,
-	.resume = synaptics_clearpad_pm_resume,
-#endif
+	.suspend = synaptics_clearpad_suspend,
+	.resume = synaptics_clearpad_resume,
 };
 
 static struct platform_driver clearpad_driver = {
