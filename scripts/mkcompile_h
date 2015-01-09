@@ -74,7 +74,7 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
   echo \#define UTS_VERSION \"`echo $UTS_VERSION | $UTS_TRUNCATE`\"
 
   echo \#define LINUX_COMPILE_BY \"ztc1997\"
-  echo \#define LINUX_COMPILE_HOST \"XID\"
+  echo \#define LINUX_COMPILE_HOST \"ZTC-PC\"
 
   echo \#define LINUX_COMPILER \"`$CC -v 2>&1 | tail -n 1`\"
 ) > .tmpcompile
