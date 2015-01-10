@@ -356,6 +356,7 @@ struct synaptics_clearpad {
 	int wakeup_down;
 	unsigned long wakeup_down_time;
 };
+unsigned long wakeup_delay;
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
 
@@ -1337,7 +1338,7 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 				this->wakeup_down_time = jiffies;
 			} else {
 			    this->wakeup_down = 1;
-				this->wakeup_down_time = jiffies + HZ / 5;
+				this->wakeup_down_time = jiffies + wakeup_delay;
 			}
 		}
 		break;
@@ -1925,6 +1926,8 @@ static ssize_t synaptics_clearpad_state_show(struct device *dev,
 			"%s", state_name[this->state]);
 	else if (!strncmp(attr->attr.name, __stringify(wakeup), PAGE_SIZE))
 		snprintf(buf, PAGE_SIZE, "%d", this->wakeup);
+	else if (!strncmp(attr->attr.name, __stringify(wakeup_delay), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", wakeup_delay);
 	else
 		snprintf(buf, PAGE_SIZE, "illegal sysfs file");
 	return strnlen(buf, PAGE_SIZE);
@@ -2066,6 +2069,19 @@ static ssize_t synaptics_clearpad_wakeup_store(struct device *dev,
 	return strnlen(buf, PAGE_SIZE);
 }
 
+static ssize_t synaptics_clearpad_wakeup_delay_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	wakeup_delay = simple_strtoul(buf, NULL, 10);
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
 static DEVICE_ATTR(fwinfo, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwfamily, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwrevision, 0604, synaptics_clearpad_state_show, 0);
@@ -2075,6 +2091,7 @@ static DEVICE_ATTR(fwflush, 0600, 0, synaptics_clearpad_fwflush_store);
 static DEVICE_ATTR(touchcmd, 0600, 0, synaptics_clearpad_touchcmd_store);
 static DEVICE_ATTR(enabled, 0600, 0, synaptics_clearpad_enabled_store);
 static DEVICE_ATTR(wakeup, 0644, synaptics_clearpad_state_show, synaptics_clearpad_wakeup_store);
+static DEVICE_ATTR(wakeup_delay, 0644, synaptics_clearpad_state_show, synaptics_clearpad_wakeup_delay_store);
 
 static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwinfo.attr,
@@ -2086,6 +2103,7 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_touchcmd.attr,
 	&dev_attr_enabled.attr,
 	&dev_attr_wakeup.attr,
+	&dev_attr_wakeup_delay.attr,
 	NULL
 };
 
@@ -2745,6 +2763,7 @@ static struct platform_driver clearpad_driver = {
 
 static int __init clearpad_init(void)
 {
+	wakeup_delay = HZ / 5;
 	return platform_driver_register(&clearpad_driver);
 }
 
