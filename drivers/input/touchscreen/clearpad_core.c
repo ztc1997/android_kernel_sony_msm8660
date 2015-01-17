@@ -352,11 +352,18 @@ struct synaptics_clearpad {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs;
 #endif
-	bool wakeup;
 	int wakeup_down;
 	unsigned long wakeup_down_time;
+	int wakeup_down_x;
+	int wakeup_down_y;
 };
-unsigned long wakeup_delay;
+bool prevent_sleep;
+bool tap2wake_enable;
+unsigned long tap2wake_interval;
+unsigned long tap2wake_x_from;
+unsigned long tap2wake_y_from;
+unsigned long tap2wake_x_to;
+unsigned long tap2wake_y_to;
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
 
@@ -1331,14 +1338,23 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		break;
 	case SYN_FUNCAREA_WAKEUP:
 		LOG_EVENT(this, "wakeup\n");
-		if (!this->wakeup_down) {
-			if (time_is_after_jiffies(this->wakeup_down_time)) {
+		if (!this->wakeup_down 
+				&& tap2wake_enable
+				&& cur->x > tap2wake_x_from 
+				&& cur->y > tap2wake_y_from 
+				&& cur->x < tap2wake_x_to 
+				&& cur->y < tap2wake_y_to) {
+			if (time_is_after_jiffies(this->wakeup_down_time) 
+					&& abs(this->wakeup_down_x - cur->x) < 50
+					&& abs(this->wakeup_down_y - cur->y) < 50) {
 				input_report_key(this->input, KEY_POWER, 1);
 				this->wakeup_down = 2;
 				this->wakeup_down_time = jiffies;
 			} else {
-			    this->wakeup_down = 1;
-				this->wakeup_down_time = jiffies + wakeup_delay;
+				this->wakeup_down = 1;
+				this->wakeup_down_time = jiffies + tap2wake_interval;
+				this->wakeup_down_x = cur->x;
+				this->wakeup_down_y = cur->y;
 			}
 		}
 		break;
@@ -1924,10 +1940,20 @@ static ssize_t synaptics_clearpad_state_show(struct device *dev,
 	else if (!strncmp(attr->attr.name, __stringify(fwstate), PAGE_SIZE))
 		snprintf(buf, PAGE_SIZE,
 			"%s", state_name[this->state]);
-	else if (!strncmp(attr->attr.name, __stringify(wakeup), PAGE_SIZE))
-		snprintf(buf, PAGE_SIZE, "%d", this->wakeup);
-	else if (!strncmp(attr->attr.name, __stringify(wakeup_delay), PAGE_SIZE))
-		snprintf(buf, PAGE_SIZE, "%d", wakeup_delay);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_enable), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_enable);
+	else if (!strncmp(attr->attr.name, __stringify(prevent_sleep), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", prevent_sleep);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_interval), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_interval);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_x_from), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_x_from);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_y_from), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_y_from);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_x_to), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_x_to);
+	else if (!strncmp(attr->attr.name, __stringify(tap2wake_y_to), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", tap2wake_y_to);
 	else
 		snprintf(buf, PAGE_SIZE, "illegal sysfs file");
 	return strnlen(buf, PAGE_SIZE);
@@ -2040,7 +2066,7 @@ end:
 	return strnlen(buf, PAGE_SIZE);
 }
 
-static ssize_t synaptics_clearpad_wakeup_store(struct device *dev,
+static ssize_t synaptics_clearpad_tap2wake_enable_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -2049,27 +2075,27 @@ static ssize_t synaptics_clearpad_wakeup_store(struct device *dev,
 	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
 
 	if (sysfs_streq(buf, "1")) {
-		if (!this->wakeup) {
+		if (!tap2wake_enable) {
 			struct synaptics_funcarea *funcarea;
 
 			funcarea = this->funcarea;
 			if (funcarea) {
 				for (; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
 					if (funcarea->func == SYN_FUNCAREA_WAKEUP) {
-						this->wakeup = true;
+						tap2wake_enable = true;
 						break;
 					}
 				}
 			}
 		}
 	} else if (sysfs_streq(buf, "0")) {
-		this->wakeup = false;
+		tap2wake_enable = false;
 	}
 
 	return strnlen(buf, PAGE_SIZE);
 }
 
-static ssize_t synaptics_clearpad_wakeup_delay_store(struct device *dev,
+static ssize_t synaptics_clearpad_prevent_sleep_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t size)
 {
@@ -2077,7 +2103,88 @@ static ssize_t synaptics_clearpad_wakeup_delay_store(struct device *dev,
 
 	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
 
-	wakeup_delay = simple_strtoul(buf, NULL, 10);
+	if (sysfs_streq(buf, "1")) {
+		if (!prevent_sleep) {
+			struct synaptics_funcarea *funcarea;
+
+			funcarea = this->funcarea;
+			if (funcarea) {
+				for (; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
+					if (funcarea->func == SYN_FUNCAREA_WAKEUP) {
+						prevent_sleep = true;
+						break;
+					}
+				}
+			}
+		}
+	} else if (sysfs_streq(buf, "0")) {
+		prevent_sleep = false;
+	}
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t synaptics_clearpad_tap2wake_interval_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	tap2wake_interval = simple_strtoul(buf, NULL, 10);
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t synaptics_clearpad_tap2wake_x_from_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	tap2wake_x_from = simple_strtoul(buf, NULL, 10);
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t synaptics_clearpad_tap2wake_y_from_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	tap2wake_y_from = simple_strtoul(buf, NULL, 10);
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t synaptics_clearpad_tap2wake_x_to_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	tap2wake_x_to = simple_strtoul(buf, NULL, 10);
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
+static ssize_t synaptics_clearpad_tap2wake_y_to_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	tap2wake_y_to = simple_strtoul(buf, NULL, 10);
 
 	return strnlen(buf, PAGE_SIZE);
 }
@@ -2090,8 +2197,13 @@ static DEVICE_ATTR(fwstate, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwflush, 0600, 0, synaptics_clearpad_fwflush_store);
 static DEVICE_ATTR(touchcmd, 0600, 0, synaptics_clearpad_touchcmd_store);
 static DEVICE_ATTR(enabled, 0600, 0, synaptics_clearpad_enabled_store);
-static DEVICE_ATTR(wakeup, 0644, synaptics_clearpad_state_show, synaptics_clearpad_wakeup_store);
-static DEVICE_ATTR(wakeup_delay, 0644, synaptics_clearpad_state_show, synaptics_clearpad_wakeup_delay_store);
+static DEVICE_ATTR(prevent_sleep, 0644, synaptics_clearpad_state_show, synaptics_clearpad_prevent_sleep_store);
+static DEVICE_ATTR(tap2wake_enable, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_enable_store);
+static DEVICE_ATTR(tap2wake_interval, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_interval_store);
+static DEVICE_ATTR(tap2wake_x_from, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_x_from_store);
+static DEVICE_ATTR(tap2wake_y_from, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_y_from_store);
+static DEVICE_ATTR(tap2wake_x_to, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_x_to_store);
+static DEVICE_ATTR(tap2wake_y_to, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_y_to_store);
 
 static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwinfo.attr,
@@ -2102,8 +2214,13 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwflush.attr,
 	&dev_attr_touchcmd.attr,
 	&dev_attr_enabled.attr,
-	&dev_attr_wakeup.attr,
-	&dev_attr_wakeup_delay.attr,
+	&dev_attr_prevent_sleep.attr,
+	&dev_attr_tap2wake_enable.attr,
+	&dev_attr_tap2wake_interval.attr,
+	&dev_attr_tap2wake_x_from.attr,
+	&dev_attr_tap2wake_y_from.attr,
+	&dev_attr_tap2wake_x_to.attr,
+	&dev_attr_tap2wake_y_to.attr,
 	NULL
 };
 
@@ -2169,9 +2286,10 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 	LOG_STAT(this, "active: %x (task: %s)\n",
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
+	
+	if (!prevent_sleep)
+		rc = synaptics_clearpad_set_power(this);
 
-	if (!this->wakeup)
-	    rc = synaptics_clearpad_set_power(this);
 	return rc;
 }
 
@@ -2190,8 +2308,7 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	if (!this->wakeup)
-	    rc = synaptics_clearpad_set_power(this);
+	rc = synaptics_clearpad_set_power(this);
 	return rc;
 }
 
@@ -2204,7 +2321,7 @@ static int synaptics_clearpad_suspend(struct device *dev)
 	rc = synaptics_clearpad_pm_suspend(&this->pdev->dev);
 #endif
 
-	if (this->wakeup) {
+	if (prevent_sleep) {
 		disable_irq(this->pdata->irq);
 		if (device_may_wakeup(dev))
 			enable_irq_wake(this->pdata->irq);
@@ -2218,7 +2335,7 @@ static int synaptics_clearpad_resume(struct device *dev)
 	struct synaptics_clearpad *this = dev_get_drvdata(dev);
 	int rc = 0;
 
-	if (this->wakeup) {
+	if (prevent_sleep) {
 		if (device_may_wakeup(dev))
 			disable_irq_wake(this->pdata->irq);
 		enable_irq(this->pdata->irq);
@@ -2763,7 +2880,11 @@ static struct platform_driver clearpad_driver = {
 
 static int __init clearpad_init(void)
 {
-	wakeup_delay = HZ / 5;
+	tap2wake_interval = HZ / 5;
+	tap2wake_x_from = 0;
+	tap2wake_y_from = 0;
+	tap2wake_x_to = 719;
+	tap2wake_y_to = 1327;
 	return platform_driver_register(&clearpad_driver);
 }
 

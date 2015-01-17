@@ -43,7 +43,7 @@ struct synaptics_funcarea clearpad_funcarea_array[] = {
 		SYN_FUNCAREA_BUTTON, &synaptics_menu_key
 	},
 	{
-		{ 20, 20, 699, 1259 }, { 0, 0, 719, 1279 },
+		{ 0, 0, 719, 1327 }, { 0, 0, 719, 1327 },
 		SYN_FUNCAREA_WAKEUP, NULL
 	},
 	{ .func = SYN_FUNCAREA_END }
