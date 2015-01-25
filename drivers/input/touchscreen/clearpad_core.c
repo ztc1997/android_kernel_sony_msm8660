@@ -2287,8 +2287,9 @@ static int synaptics_clearpad_pm_suspend(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 	
-	if (!prevent_sleep)
+	if (!prevent_sleep){
 		rc = synaptics_clearpad_set_power(this);
+	}
 
 	return rc;
 }
@@ -2308,7 +2309,20 @@ static int synaptics_clearpad_pm_resume(struct device *dev)
 		 this->active, task_name[this->task]);
 	UNLOCK(this);
 
-	rc = synaptics_clearpad_set_power(this);
+	
+	
+	if (prevent_sleep){
+		LOCK(this);
+		rc = synaptics_put_bit(this, SYNF(F01_RMI, CTRL, 0x00),
+			DEVICE_CONTROL_SLEEP_MODE_SENSOR_SLEEP,
+			DEVICE_CONTROL_SLEEP_MODE);
+		rc = synaptics_put_bit(this, SYNF(F01_RMI, CTRL, 0x00),
+			DEVICE_CONTROL_SLEEP_MODE_NORMAL_OPERATION,
+			DEVICE_CONTROL_SLEEP_MODE);
+		UNLOCK(this);
+	} else {
+		rc = synaptics_clearpad_set_power(this);
+	}
 	return rc;
 }
 
