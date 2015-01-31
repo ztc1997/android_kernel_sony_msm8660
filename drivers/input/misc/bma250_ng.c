@@ -98,6 +98,10 @@
 #include <linux/module.h>
 #include <linux/reboot.h>
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+#include "bma250_motion.h"
+#endif
+
 #define BMA250_NAME                      "bma250"
 #define BMA250_VENDORID                  0x0001
 
@@ -206,6 +210,9 @@ struct driver_data {
 	struct dentry               *dbfs_regs;
 	struct bma250_platform_data *pdata;
 	bool                         power;
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	void                        *motion_dev;
+#endif
 };
 
 struct mutex                      bma250_power_lock;
@@ -307,28 +314,8 @@ static inline int bma250_bw_handler(struct driver_data *dd)
 static inline int bma250_range_handler(struct driver_data *dd)
 {
 	int rc = 0;
-	u8 threshold, duration = 0;
-
-	if (dd->range == BMA250_RANGE_16G)
-		threshold = 2;
-	else if (dd->range == BMA250_RANGE_8G)
-		threshold = 3;
-	else if (dd->range == BMA250_RANGE_4G)
-		threshold = 4;
-	else
-		threshold = 5;
 
 	rc = bma250_ic_write(dd->ic_dev, BMA250_RANGE_REG, dd->range);
-	if (rc)
-		goto range_error;
-
-	/* threshold definition for the slope int, g-range dependant */
-	rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_THR, threshold);
-	if (rc)
-		goto range_error;
-
-	/* number of samples (n + 1) to be evaluted for slope int */
-	rc = bma250_ic_write(dd->ic_dev, BMA250_SLOPE_DUR, duration);
 	if (rc)
 		goto range_error;
 
@@ -728,6 +715,10 @@ static int bma250_suspend(struct i2c_client *ic_dev, pm_message_t mesg)
 
 	dd->pdata->power_mode(0);
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	if (dd->motion_dev)
+		bma250_motion_suspend(dd->motion_dev);
+#endif
 	return 0;
 }
 
@@ -735,6 +726,11 @@ static int bma250_resume(struct i2c_client *ic_dev)
 {
 	struct driver_data *dd = bma250_ic_get_data(ic_dev);
 	int rc = 0;
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	if (dd->motion_dev)
+		bma250_motion_resume(dd->motion_dev);
+#endif
 
 	dd->pdata->power_mode(1);
 
@@ -967,6 +963,9 @@ static int __devinit bma250_probe(struct i2c_client *ic_dev,
 	if (rc)
 		goto probe_err_notifier;
 
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	dd->motion_dev = bma250_motion_probe(ic_dev);
+#endif
 	return rc;
 
 probe_err_notifier:
@@ -992,6 +991,11 @@ static int __devexit bma250_remove(struct i2c_client *ic_dev)
 {
 	struct driver_data *dd = bma250_ic_get_data(ic_dev);
 	int                 rc;
+
+#ifdef CONFIG_INPUT_BMA250_MOTION
+	if (dd->motion_dev)
+		bma250_motion_remove(dd->motion_dev);
+#endif
 
 	rc = bma250_power_down(dd);
 	if (rc)

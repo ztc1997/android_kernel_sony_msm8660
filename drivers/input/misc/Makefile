@@ -69,6 +69,7 @@ obj-$(CONFIG_INPUT_L3G4200D)		+= l3g4200d_gyr_sysfs.o
 obj-$(CONFIG_INPUT_NOA3402)             += noa3402.o
 obj-$(CONFIG_INPUT_BMA250)              += bma250.o
 obj-$(CONFIG_INPUT_BMA250_NG)		+= bma250_ng.o
+obj-$(CONFIG_INPUT_BMA250_MOTION)	+= bma250_motion.o
 obj-$(CONFIG_INPUT_AKM8972)             += akm8972.o
 obj-$(CONFIG_INPUT_APDS9702)            += apds9702.o
 obj-$(CONFIG_INPUT_SIMPLE_REMOTE)       += simple_remote.o

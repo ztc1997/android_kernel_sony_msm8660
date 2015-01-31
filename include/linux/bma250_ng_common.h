@@ -17,6 +17,7 @@
 
 #define BMA250_SLAVE1 0x01
 #define BMA250_SLAVE2 0x02
+#define BMA250_SLAVE3 0x04
 
 #if defined(CONFIG_SENSORS_MPU3050)
 extern struct mutex mutex_fifo_reading_access_lock;

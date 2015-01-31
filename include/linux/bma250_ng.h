@@ -59,6 +59,35 @@
 #define BMA250_VERSION_REG               0x01
 #define BMA250_X_AXIS_LSB_REG            0x02
 
+#define BMA250_INT_STATUS_REG            0x09
+#define BMA250_INT_STATUS_FLAT           0x80
+#define BMA250_INT_STATUS_ORIENT         0x40
+#define BMA250_INT_STATUS_S_TAP          0x20
+#define BMA250_INT_STATUS_D_TAP          0x10
+#define BMA250_INT_STATUS_SLOPE          0x04
+#define BMA250_INT_STATUS_HIGH_G         0x02
+#define BMA250_INT_STATUS_LOW_G          0x01
+
+#define BMA250_INT_STATUS_NEW_DATA_REG   0x0A
+#define BMA250_INT_STATUS_NEW_DATA       0x80
+
+#define BMA250_TAP_SLOPE_STATUS_REG      0x0B
+#define BMA250_TAP_SIGN                  0x80
+#define BMA250_TAP_FIRST_Z               0x40
+#define BMA250_TAP_FIRST_Y               0x20
+#define BMA250_TAP_FIRST_X               0x10
+#define BMA250_SLOPE_SIGN                0x08
+#define BMA250_SLOPE_FIRST_Z             0x04
+#define BMA250_SLOPE_FIRST_Y             0x02
+#define BMA250_SLOPE_FIRST_X             0x01
+
+#define BMA250_ORIENT_STATUS_REG         0x0C
+#define BMA250_FLAT_STATUS               0x80
+#define BMA250_HIGH_G_SIGN               0x08
+#define BMA250_HIGH_G_FIRST_Z            0x04
+#define BMA250_HIGH_G_FIRST_Y            0x02
+#define BMA250_HIGH_G_FIRST_X            0x01
+
 #define BMA250_RANGE_REG                 0x0F
 #define BMA250_RANGE_MASK                0x0F
 #define BMA250_RANGE_16G                 0x0C
@@ -95,22 +124,27 @@
 #define BMA250_RESET                     0xB6
 
 #define BMA250_INT_ENABLE1_REG           0x16
+#define BMA250_INT_ENABLE1_MASK          0xF7
 #define BMA250_INT_FLAT                  0x80
 #define BMA250_INT_ORIENT                0x40
 #define BMA250_INT_S_TAP                 0x20
 #define BMA250_INT_D_TAP                 0x10
+#define BMA250_INT_SLOPE_MASK            0x07
 #define BMA250_INT_SLOPE_Z               0x04
 #define BMA250_INT_SLOPE_Y               0x02
 #define BMA250_INT_SLOPE_X               0x01
 
 #define BMA250_INT_ENABLE2_REG           0x17
+#define BMA250_INT_ENABLE2_MASK          0x1F
 #define BMA250_INT_NEW_DATA              0x10
 #define BMA250_INT_LOW_G                 0x08
+#define BMA250_INT_HIGH_G_MASK           0x07
 #define BMA250_INT_HIGH_G_Z              0x04
 #define BMA250_INT_HIGH_G_Y              0x02
 #define BMA250_INT_HIGH_G_X              0x01
 
 #define BMA250_INT_PIN1_REG              0x19
+#define BMA250_INT_PIN1_MASK             0xF7
 #define BMA250_INT_PIN1_FLAT             0x80
 #define BMA250_INT_PIN1_ORIENT           0x40
 #define BMA250_INT_PIN1_S_TAP            0x20
@@ -132,11 +166,78 @@
 #define BMA250_INT_PIN2_HIGH_G           0x02
 #define BMA250_INT_PIN2_LOW_G            0x01
 
+#define BMA250_INT_CONFIG_REG            0x20
+#define BMA250_INT_PIN2_OD               0x08
+#define BMA250_INT_PIN2_LEVEL            0x04
+#define BMA250_INT_PIN1_OD               0x02
+#define BMA250_INT_PIN1_LEVEL            0x01
+
 #define BMA250_INT_CTRL_REG              0x21
 #define BMA250_INT_RESET                 0x80
+#define BMA250_INT_NON_LATCHED           0x00
+#define BMA250_INT_250MS                 0x01
+#define BMA250_INT_500MS                 0x02
+#define BMA250_INT_1S                    0x03
+#define BMA250_INT_2S                    0x04
+#define BMA250_INT_4S                    0x05
+#define BMA250_INT_8S                    0x06
+#define BMA250_INT_LATCHED               0x07
+#define BMA250_INT_500US                 0x09
+#define BMA250_INT_1MS                   0x0B
+#define BMA250_INT_12_5MS                0x0C
+#define BMA250_INT_25MS                  0x0D
+#define BMA250_INT_50MS                  0x0E
 
-#define BMA250_SLOPE_DUR                 0x27
-#define BMA250_SLOPE_THR                 0x28
+#define BMA250_LOW_G_DUR_REG             0x22
+#define BMA250_LOW_G_THR_REG             0x23
+
+#define BMA250_G_MODE_REG                0x24
+#define BMA250_HIGH_G_HY_MASK            0xC0
+#define BMA250_LOW_G_MODE_SINGLE         0x00
+#define BMA250_LOW_G_MODE_SUM            0x04
+#define BMA250_LOW_G_HY_MASK             0x03
+
+#define BMA250_HIGH_G_DUR_REG            0x25
+#define BMA250_HIGH_G_THR_REG            0x26
+
+#define BMA250_SLOPE_DUR_REG             0x27
+#define BMA250_SLOPE_DUR_MASK            0x03
+
+#define BMA250_SLOPE_THR_REG             0x28
+
+#define BMA250_TAP_DUR_REG               0x2A
+#define BMA250_TAP_QUIET_MASK            0x80
+#define BMA250_TAP_QUIET_30MS            0x00
+#define BMA250_TAP_QUIET_20MS            0x80
+#define BMA250_TAP_SHOCK_MASK            0x40
+#define BMA250_TAP_SHOCK_50MS            0x00
+#define BMA250_TAP_SHOCK_75MS            0x40
+#define BMA250_TAP_DUR_MASK              0x07
+#define BMA250_TAP_DUR_50MS              0x00
+#define BMA250_TAP_DUR_100MS             0x01
+#define BMA250_TAP_DUR_150MS             0x02
+#define BMA250_TAP_DUR_200MS             0x03
+#define BMA250_TAP_DUR_250MS             0x04
+#define BMA250_TAP_DUR_370MS             0x05
+#define BMA250_TAP_DUR_500MS             0x06
+#define BMA250_TAP_DUR_700MS             0x07
+
+#define BMA250_TAP_THR_REG               0x2B
+#define BMA250_TAP_SAMPLE_2              0x00
+#define BMA250_TAP_SAMPLE_4              0x40
+#define BMA250_TAP_SAMPLE_8              0x80
+#define BMA250_TAP_SAMPLE_16             0xC0
+#define BMA250_TAP_THR_MASK              0x1F
+
+#define BMA250_FLAT_THETA_REG            0x2E
+#define BMA250_FLAT_THETA_MASK           0x3F
+
+#define BMA250_FLAT_HOLD_REG             0x2F
+#define BMA250_FLAT_HOLD_MASK            0x30
+#define BMA250_FLAT_HOLD_0               0x00
+#define BMA250_FLAT_HOLD_512MS           0x10
+#define BMA250_FLAT_HOLD_1024MS          0x20
+#define BMA250_FLAT_HOLD_2048MS          0x30
 
 #define BMA250_INTERRUPT_RESOLUTION   0
 #define BMA250_TIMER_RESOLUTION       1

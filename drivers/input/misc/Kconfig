@@ -718,6 +718,14 @@ config INPUT_BMA250_NG
 	  device. This driver only supports I2C communication.
 	  This device driver supprot to get accelerometer data from
 	  other parent device's register.
+ 
+config INPUT_BMA250_MOTION
+	tristate "Bosch BMA250 accelerometer (motion detection)"
+	default n
+	depends on INPUT_BMA250_NG
+	help
+	  Say Y here if you want support for the BMA250 accelerometer
+	  devic emotion detection.
 
 config INPUT_AKM8972
 	tristate "AKM8972 Compass Driver"
