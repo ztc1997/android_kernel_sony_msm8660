@@ -36,6 +36,8 @@
 #include <asm/mach-types.h>
 #endif
 
+#include "../../staging/android/timed_output.h"
+
 #define SYNAPTICS_CLEARPAD_VENDOR		0x1
 #define SYNAPTICS_MAX_N_FINGERS			10
 #define SYNAPTICS_FINGER_DATA_SIZE		5
@@ -357,6 +359,8 @@ struct synaptics_clearpad {
 	int wakeup_down_x;
 	int wakeup_down_y;
 };
+struct timed_output_dev *timed_output_device;
+
 bool prevent_sleep;
 bool tap2wake_enable;
 unsigned long tap2wake_interval;
@@ -364,6 +368,20 @@ unsigned long tap2wake_x_from;
 unsigned long tap2wake_y_from;
 unsigned long tap2wake_x_to;
 unsigned long tap2wake_y_to;
+
+#define ABS_THRESHOLD_X			450
+
+static bool s2w_enable = false;
+static bool s2w_down   = false;
+
+static int x_down;
+
+static int x_threshold = ABS_THRESHOLD_X;
+
+void set_timed_output_device(struct timed_output_dev *dev)
+{
+	timed_output_device = dev;
+}
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
 
@@ -1270,6 +1288,9 @@ synaptics_funcarea_search(struct synaptics_clearpad *this,
 		    && synaptics_funcarea_test(&funcarea->extension,
 						&pointer->cur))
 			return funcarea;
+		
+		if (funcarea->func == SYN_FUNCAREA_WAKEUP)
+			return funcarea;
 	}
 
 	return NULL;
@@ -1338,7 +1359,7 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 		break;
 	case SYN_FUNCAREA_WAKEUP:
 		LOG_EVENT(this, "wakeup\n");
-		if (!this->wakeup_down 
+		if (!this->wakeup_down
 				&& tap2wake_enable
 				&& cur->x > tap2wake_x_from 
 				&& cur->y > tap2wake_y_from 
@@ -1348,6 +1369,8 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 					&& abs(this->wakeup_down_x - cur->x) < 50
 					&& abs(this->wakeup_down_y - cur->y) < 50) {
 				input_report_key(this->input, KEY_POWER, 1);
+				if(timed_output_device != NULL)
+					timed_output_device->enable(timed_output_device, 50);
 				this->wakeup_down = 2;
 				this->wakeup_down_time = jiffies;
 			} else {
@@ -1356,6 +1379,11 @@ static void synaptics_funcarea_down(struct synaptics_clearpad *this,
 				this->wakeup_down_x = cur->x;
 				this->wakeup_down_y = cur->y;
 			}
+		}
+		if (s2w_enable && !s2w_down) {
+			s2w_down = true;
+			if (cur->y > 1279)
+				x_down = cur->x;
 		}
 		break;
 	default:
@@ -1367,6 +1395,7 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 				  struct synaptics_pointer *pointer)
 {
 	struct synaptics_button_data *button;
+	struct synaptics_point *cur = &pointer->cur;
 
 	switch (pointer->funcarea->func) {
 	case SYN_FUNCAREA_INSENSIBLE:
@@ -1389,6 +1418,16 @@ static void synaptics_funcarea_up(struct synaptics_clearpad *this,
 			if (this->wakeup_down == 2)
 				input_report_key(this->input, KEY_POWER, 0);
 			this->wakeup_down = 0;
+		}
+		if (s2w_enable) {
+			s2w_down = false;
+
+			if (cur->x - x_down >= x_threshold && cur->y > 1279) {
+				input_report_key(this->input, KEY_POWER, true);
+				input_report_key(this->input, KEY_POWER, false);
+				if(timed_output_device != NULL)
+					timed_output_device->enable(timed_output_device, 50);
+			}
 		}
 	    break;
 	default:
@@ -1954,6 +1993,8 @@ static ssize_t synaptics_clearpad_state_show(struct device *dev,
 		snprintf(buf, PAGE_SIZE, "%d", tap2wake_x_to);
 	else if (!strncmp(attr->attr.name, __stringify(tap2wake_y_to), PAGE_SIZE))
 		snprintf(buf, PAGE_SIZE, "%d", tap2wake_y_to);
+	else if (!strncmp(attr->attr.name, __stringify(s2w_enable), PAGE_SIZE))
+		snprintf(buf, PAGE_SIZE, "%d", s2w_enable);
 	else
 		snprintf(buf, PAGE_SIZE, "illegal sysfs file");
 	return strnlen(buf, PAGE_SIZE);
@@ -2189,6 +2230,35 @@ static ssize_t synaptics_clearpad_tap2wake_y_to_store(struct device *dev,
 	return strnlen(buf, PAGE_SIZE);
 }
 
+static ssize_t synaptics_clearpad_s2w_enable_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	struct synaptics_clearpad *this = dev_get_drvdata(dev);
+
+	dev_dbg(&this->pdev->dev, "%s: start\n", __func__);
+
+	if (sysfs_streq(buf, "1")) {
+		if (!s2w_enable) {
+			struct synaptics_funcarea *funcarea;
+
+			funcarea = this->funcarea;
+			if (funcarea) {
+				for (; funcarea->func != SYN_FUNCAREA_END; funcarea++) {
+					if (funcarea->func == SYN_FUNCAREA_WAKEUP) {
+						s2w_enable = true;
+						break;
+					}
+				}
+			}
+		}
+	} else if (sysfs_streq(buf, "0")) {
+		s2w_enable = false;
+	}
+
+	return strnlen(buf, PAGE_SIZE);
+}
+
 static DEVICE_ATTR(fwinfo, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwfamily, 0600, synaptics_clearpad_state_show, 0);
 static DEVICE_ATTR(fwrevision, 0604, synaptics_clearpad_state_show, 0);
@@ -2204,6 +2274,7 @@ static DEVICE_ATTR(tap2wake_x_from, 0644, synaptics_clearpad_state_show, synapti
 static DEVICE_ATTR(tap2wake_y_from, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_y_from_store);
 static DEVICE_ATTR(tap2wake_x_to, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_x_to_store);
 static DEVICE_ATTR(tap2wake_y_to, 0644, synaptics_clearpad_state_show, synaptics_clearpad_tap2wake_y_to_store);
+static DEVICE_ATTR(s2w_enable, 0644, synaptics_clearpad_state_show, synaptics_clearpad_s2w_enable_store);
 
 static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_fwinfo.attr,
@@ -2221,6 +2292,7 @@ static struct attribute *synaptics_clearpad_attributes[] = {
 	&dev_attr_tap2wake_y_from.attr,
 	&dev_attr_tap2wake_x_to.attr,
 	&dev_attr_tap2wake_y_to.attr,
+	&dev_attr_s2w_enable.attr,
 	NULL
 };
 

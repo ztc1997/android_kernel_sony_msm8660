@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/mfd/pm8xxx/core.h>
 #include <linux/mfd/pm8xxx/vibrator.h>
+#include <linux/clearpad.h>
 
 #include "../staging/android/timed_output.h"
 
@@ -267,6 +268,8 @@ static int __devinit pm8xxx_vib_probe(struct platform_device *pdev)
 	vib->reg_vib_drv = val;
 
 	rc = timed_output_dev_register(&vib->timed_dev);
+	set_timed_output_device(&vib->timed_dev);
+	
 	if (rc < 0)
 		goto err_read_vib;
 
