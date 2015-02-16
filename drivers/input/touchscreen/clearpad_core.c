@@ -36,8 +36,6 @@
 #include <asm/mach-types.h>
 #endif
 
-#include "../../staging/android/timed_output.h"
-
 #define SYNAPTICS_CLEARPAD_VENDOR		0x1
 #define SYNAPTICS_MAX_N_FINGERS			10
 #define SYNAPTICS_FINGER_DATA_SIZE		5
@@ -382,6 +380,7 @@ void set_timed_output_device(struct timed_output_dev *dev)
 {
 	timed_output_device = dev;
 }
+EXPORT_SYMBOL_GPL(set_timed_output_device);
 
 static void synaptics_funcarea_initialize(struct synaptics_clearpad *this);
 

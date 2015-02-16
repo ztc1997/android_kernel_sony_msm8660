@@ -18,6 +18,8 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 
+#include "../../drivers/staging/android/timed_output.h"
+
 #define CLEARPAD_NAME "clearpad"
 #define CLEARPADI2C_NAME "clearpad-i2c"
 #define CLEARPAD_RMI_DEV_NAME "clearpad-rmi-dev"
@@ -79,4 +81,6 @@ struct clearpad_data {
 	struct clearpad_platform_data *pdata;
 	struct clearpad_bus_data *bdata;
 };
+
+extern void set_timed_output_device(struct timed_output_dev *dev);
 #endif
